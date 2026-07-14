@@ -1,0 +1,6 @@
+{
+  "name": "Session Player",
+  "description": "An AI-driven MIDI session musician companion for real-time chord progressions, melodic improvisation, and live DAW accompaniment.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

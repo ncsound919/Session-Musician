@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TakeTrack",
+  "description": "Schema for the Takes + Highlighter feature in Session Player. A TakeTrack stores multiple MIDI takes for a single track, with highlight regions for directing playback style.",
+  "type": "object",
+  "required": ["track_id", "instrument_hint", "takes"],
+  "properties": {
+    "track_id": {
+      "type": "string",
+      "description": "Unique identifier for the track (e.g. 'bass_1', 'guitar_solo_2')."
+    },
+    "instrument_hint": {
+      "type": "string",
+      "description": "High-level description of the desired instrument and style (e.g. 'jazzy guitar solo')."
+    },
+    "takes": {
+      "type": "array",
+      "description": "Ordered list of MIDI takes recorded by the Session Player.",
+      "items": {
+        "$ref": "#/definitions/Take"
+      }
+    }
+  },
+  "definitions": {
+    "MidiNote": {
+      "type": "object",
+      "required": ["pitch", "velocity", "start", "end"],
+      "properties": {
+        "pitch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127,
+          "description": "MIDI note number (0–127, where 60 = middle C)."
+        },
+        "velocity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127,
+          "description": "MIDI velocity (0–127)."
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Start time in beats."
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0,
+          "description": "End time in beats."
+        }
+      }
+    },
+    "ExpressionSection": {
+      "type": "object",
+      "required": ["start", "end", "label", "strength"],
+      "properties": {
+        "start": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Start time in beats."
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0,
+          "description": "End time in beats."
+        },
+        "label": {
+          "type": "string",
+          "description": "Director's note for this section (e.g. 'more funky', 'less busy')."
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Intensity multiplier (1.0 = neutral, >1 = more, <1 = less)."
+        }
+      }
+    },
+    "Expressions": {
+      "type": "object",
+      "required": ["overall", "sections"],
+      "properties": {
+        "overall": {
+          "type": "string",
+          "description": "Overall expression description for the take (e.g. 'moderate funk, slightly jazzy')."
+        },
+        "sections": {
+          "type": "array",
+          "description": "Time-ranged director's notes.",
+          "items": {
+            "$ref": "#/definitions/ExpressionSection"
+          }
+        }
+      }
+    },
+    "HighlightRegion": {
+      "type": "object",
+      "required": ["id", "start", "end", "action"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this highlight region."
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Start time in beats."
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0,
+          "description": "End time in beats."
+        },
+        "action": {
+          "type": "string",
+          "description": "Directive action: 'keep', 'delete', or a style modifier like 'more funky', 'less busy', 'more jazzy'."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Optional freeform guidance text."
+        }
+      }
+    },
+    "Take": {
+      "type": "object",
+      "required": ["id", "recorded_at", "midi_notes", "highlight_regions"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Sequential take number."
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of when the take was recorded."
+        },
+        "midi_notes": {
+          "type": "array",
+          "description": "Raw MIDI notes for this take.",
+          "items": {
+            "$ref": "#/definitions/MidiNote"
+          }
+        },
+        "expressions": {
+          "$ref": "#/definitions/Expressions",
+          "description": "Optional higher-level expression directives for this take."
+        },
+        "highlight_regions": {
+          "type": "array",
+          "description": "User-tagged regions with keep/delete/more/less actions.",
+          "items": {
+            "$ref": "#/definitions/HighlightRegion"
+          }
+        },
+        "applied_hints_from_previous_take": {
+          "type": "array",
+          "description": "Human-readable list of hints that were applied from the previous take's highlights.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
