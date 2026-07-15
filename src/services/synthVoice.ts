@@ -4,51 +4,10 @@
  */
 
 import { SynthParams } from '../types';
+import { applyJunoChorus } from './audioUtils';
 import { buildOscBank } from './oscBank';
 import { buildFilterStage } from './filterStage';
 import { ADSRBuilder, LFOBuilder } from './synthEngine';
-
-// ──── Juno chorus ────
-function applyJunoChorus(
-  ctx: AudioContext,
-  input: AudioNode,
-  destination: AudioNode,
-  level: number,
-  time: number,
-  duration: number
-): void {
-  if (!level) {
-    input.connect(destination);
-    return;
-  }
-
-  // Dry path
-  input.connect(destination);
-
-  const chorusDelay = ctx.createDelay(0.1);
-  const chorusLfo = ctx.createOscillator();
-  const chorusDepth = ctx.createGain();
-
-  const rate = level === 1 ? 0.5 : 0.82;
-  const depth = level === 1 ? 0.0025 : 0.0045;
-  const baseDelay = level === 1 ? 0.015 : 0.025;
-
-  chorusDelay.delayTime.setValueAtTime(baseDelay, time);
-  chorusLfo.frequency.setValueAtTime(rate, time);
-  chorusDepth.gain.setValueAtTime(depth, time);
-
-  chorusLfo.connect(chorusDepth);
-  chorusDepth.connect(chorusDelay.delayTime);
-  chorusLfo.start(time);
-  chorusLfo.stop(time + duration + 0.5);
-
-  const chorusGain = ctx.createGain();
-  chorusGain.gain.setValueAtTime(0.5, time);
-
-  input.connect(chorusDelay);
-  chorusDelay.connect(chorusGain);
-  chorusGain.connect(destination);
-}
 
 export interface VoiceInstrumentDefaults {
   oscType: OscillatorType;

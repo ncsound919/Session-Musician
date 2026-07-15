@@ -164,6 +164,8 @@ export interface SynthParams {
   glideTime?: number;        // seconds, portamento time between notes
 }
 
+export type SophisticationLevel = number;
+
 export interface InstrumentState {
   type: InstrumentType;
   enabled: boolean;
