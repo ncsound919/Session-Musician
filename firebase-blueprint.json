@@ -1,0 +1,23 @@
+{
+  "collections": {
+    "sessions": {
+      "schema": {
+        "userId": "string",
+        "name": "string",
+        "bpm": "number",
+        "key": "string",
+        "song": "any",
+        "instrumentStates": "any",
+        "updatedAt": "timestamp"
+      },
+      "indexes": [
+        {
+          "fields": {
+            "userId": "asc",
+            "updatedAt": "desc"
+          }
+        }
+      ]
+    }
+  }
+}

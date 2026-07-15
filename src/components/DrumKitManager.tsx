@@ -17,37 +17,20 @@ interface DrumKitManagerProps {
 const SAMPLE_TYPES: DrumSample['type'][] = ['Kick', 'Snare', 'HiHat', 'Tom', 'Cymbal', 'Percussion'];
 
 export const DrumKitManager: React.FC<DrumKitManagerProps> = ({ currentKit, onUpdateKit }) => {
-  const [kitName, setKitName] = React.useState(currentKit?.name || 'New Custom Kit');
-  const [samples, setSamples] = React.useState<DrumSample[]>(currentKit?.samples || []);
-
-  // Track all active blob: URLs so every one is revoked on unmount regardless of when it was added
-  const activeUrlsRef = React.useRef<Set<string>>(new Set(currentKit?.samples.map(s => s.url) ?? []));
-
-  React.useEffect(() => {
-    return () => {
-      activeUrlsRef.current.forEach(url => {
-        URL.revokeObjectURL(url);
-        audioEngine.evictSample(url);
-      });
-      activeUrlsRef.current.clear();
-    };
-  }, []);
-
-  const revokeAndEvict = (url: string) => {
-    URL.revokeObjectURL(url);
-    audioEngine.evictSample(url);
-    activeUrlsRef.current.delete(url);
-  };
+  const kitName = currentKit?.name || 'New Custom Kit';
+  const samples = currentKit?.samples || [];
 
   const handleFileUpload = (type: DrumSample['type'], e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // Revoke the old URL for this slot to avoid a memory leak
       const oldSample = samples.find(s => s.type === type);
-      if (oldSample) revokeAndEvict(oldSample.url);
+      if (oldSample) {
+        URL.revokeObjectURL(oldSample.url);
+        audioEngine.evictSample(oldSample.url);
+      }
 
       const newUrl = URL.createObjectURL(file);
-      activeUrlsRef.current.add(newUrl);
       const newSample: DrumSample = {
         id: crypto.randomUUID(),
         name: file.name,
@@ -55,7 +38,6 @@ export const DrumKitManager: React.FC<DrumKitManagerProps> = ({ currentKit, onUp
         type
       };
       const updatedSamples = [...samples.filter(s => s.type !== type), newSample];
-      setSamples(updatedSamples);
       onUpdateKit({
         id: currentKit?.id || crypto.randomUUID(),
         name: kitName,
@@ -66,10 +48,12 @@ export const DrumKitManager: React.FC<DrumKitManagerProps> = ({ currentKit, onUp
 
   const removeSample = (id: string) => {
     const sample = samples.find(s => s.id === id);
-    if (sample) revokeAndEvict(sample.url);
+    if (sample) {
+      URL.revokeObjectURL(sample.url);
+      audioEngine.evictSample(sample.url);
+    }
 
     const updatedSamples = samples.filter(s => s.id !== id);
-    setSamples(updatedSamples);
     onUpdateKit({
       id: currentKit?.id || crypto.randomUUID(),
       name: kitName,
@@ -87,7 +71,13 @@ export const DrumKitManager: React.FC<DrumKitManagerProps> = ({ currentKit, onUp
         <input 
           type="text"
           value={kitName}
-          onChange={(e) => setKitName(e.target.value)}
+          onChange={(e) => {
+            onUpdateKit({
+              id: currentKit?.id || crypto.randomUUID(),
+              name: e.target.value,
+              samples
+            });
+          }}
           className="bg-transparent text-right text-[9px] font-mono text-studio-accent focus:outline-none border-b border-transparent focus:border-studio-accent/30"
         />
       </div>
@@ -107,13 +97,22 @@ export const DrumKitManager: React.FC<DrumKitManagerProps> = ({ currentKit, onUp
               }>
                 {sample ? (
                   <>
-                    <Music className="w-3.5 h-3.5 text-studio-accent mb-0.5" />
-                    <span className="text-[7px] font-mono text-studio-accent truncate px-2 w-full text-center">
-                      {sample.name}
-                    </span>
+                    <div 
+                      onClick={() => audioEngine.playDrumSample(sample.url, 100)}
+                      className="cursor-pointer flex flex-col items-center justify-center w-full h-full p-2 select-none group/btn hover:bg-studio-accent/5 transition-colors"
+                      title="Click to preview sample"
+                    >
+                      <Music className="w-3.5 h-3.5 text-studio-accent mb-0.5 group-hover/btn:scale-125 transition-transform" />
+                      <span className="text-[7px] font-mono text-studio-accent truncate px-2 w-full text-center">
+                        {sample.name}
+                      </span>
+                    </div>
                     <button 
-                      onClick={() => removeSample(sample.id)}
-                      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeSample(sample.id);
+                      }}
+                      className="absolute top-0.5 right-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-pointer"
                       style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
                     >
                       <Trash2 className="w-2.5 h-2.5" />

@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
+import { audioEngine } from '../services/audioEngine';
 
 interface MidiVisualizerProps {
   isPlaying: boolean;
@@ -20,85 +21,122 @@ export const MidiVisualizer: React.FC<MidiVisualizerProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
-  const startTimeRef = useRef<number>(0);
 
-  const draw = (time: number) => {
+  const draw = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (!startTimeRef.current) startTimeRef.current = time;
-    const elapsed = time - startTimeRef.current;
+    // Retrieve active playback details from the synthesizer sequencer
+    const state = audioEngine.getPlaybackState();
 
-    // Clear with warm fade for trail effect
-    ctx.fillStyle = 'rgba(10, 10, 11, 0.2)';
+    // Clear background with subtle persistence trail effect
+    ctx.fillStyle = 'rgba(10, 10, 11, 0.25)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const barWidth = 4;
-    const gap = 2;
-    const stepCount = 32;
-    const totalWidth = (barWidth + gap) * stepCount;
-    const startX = (canvas.width - totalWidth) / 2;
+    const paddingX = 20;
+    const totalWidth = canvas.width - paddingX * 2;
 
-    // Draw grid with warm tone
-    ctx.strokeStyle = 'rgba(99, 102, 241, 0.05)';
+    // Draw horizontal grid lines for lanes
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
     ctx.lineWidth = 1;
-    for (let i = 0; i <= stepCount; i++) {
-      const x = startX + i * (barWidth + gap);
+    const rowsCount = instrumentType === 'Drums' ? 6 : 8;
+    for (let r = 0; r < rowsCount; r++) {
+      const ry = 15 + (r / (rowsCount - 1)) * (canvas.height - 30);
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
+      ctx.moveTo(paddingX, ry);
+      ctx.lineTo(canvas.width - paddingX, ry);
       ctx.stroke();
     }
 
-    // Draw "MIDI" notes based on instrument and params
-    if (isPlaying) {
-      const playhead = (elapsed / 2000) % 1; // 2 second loop
-      const currentStep = Math.floor(playhead * stepCount);
-      
-      for (let i = 0; i < stepCount; i++) {
-        // Pseudo-random generation seeded by instrument and params
-        const seed = Math.sin(i * 0.5 + instrumentType.length) * 10000;
-        const rand = Math.abs(seed % 100);
-        
-        if (rand < density) {
-          const x = startX + i * (barWidth + gap);
-          const height = 10 + (rand % 30);
-          const y = (canvas.height / 2) - (height / 2) + Math.sin(i * groove * 0.01) * 10;
-          
-          const opacity = i === currentStep ? 1 : 0.3;
-          ctx.fillStyle = `rgba(99, 102, 241, ${opacity})`;
-          
-          ctx.beginPath();
-          ctx.roundRect(x, y, barWidth, height, 2);
-          ctx.fill();
+    // Filter notes relevant to the current instrument channel
+    const notes = state.notes.filter(n => n.channel === instrumentType);
 
-          if (i === currentStep) {
-            // Warm glow effect for active note
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#6366f1';
-            ctx.fillRect(x, y, barWidth, height);
-            ctx.shadowBlur = 0;
-          }
-        }
+    // Coordinate mapping for Drums vs Melody instruments
+    const getDrumY = (noteNum: number) => {
+      // 36 (Kick), 38 (Snare), 42 (HiHat), 47 (Tom), 49/51 (Cymbal), 56 (Percussion)
+      if (noteNum === 36) return canvas.height - 20;
+      if (noteNum === 38) return canvas.height - 38;
+      if (noteNum === 42) return canvas.height - 56;
+      if (noteNum === 47) return canvas.height - 74;
+      if (noteNum === 49 || noteNum === 51) return canvas.height - 92;
+      return canvas.height - 110;
+    };
+
+    // Scaled notes calculation for melodies
+    let minNote = 127;
+    let maxNote = 0;
+    notes.forEach(n => {
+      if (n.note < minNote) minNote = n.note;
+      if (n.note > maxNote) maxNote = n.note;
+    });
+
+    if (maxNote === minNote || notes.length === 0) {
+      minNote = 36;
+      maxNote = 84;
+    } else {
+      minNote = Math.max(0, minNote - 3);
+      maxNote = Math.min(127, maxNote + 3);
+    }
+    const noteRange = maxNote - minNote;
+
+    const getY = (noteNum: number) => {
+      return canvas.height - 15 - ((noteNum - minNote) / noteRange) * (canvas.height - 30);
+    };
+
+    // Draw scheduled notes
+    notes.forEach(note => {
+      const x = paddingX + (note.tick / state.totalTicks) * totalWidth;
+      const width = Math.max(5, (note.duration / state.totalTicks) * totalWidth);
+      const y = instrumentType === 'Drums' ? getDrumY(note.note) : getY(note.note);
+      const height = instrumentType === 'Drums' ? 6 : 8;
+
+      // Determine if playhead is currently crossing/playing this note
+      const isCrossed = state.isRunning && 
+        state.currentTick >= note.tick && 
+        state.currentTick <= note.tick + note.duration;
+
+      if (isCrossed) {
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#818cf8';
+        ctx.fillStyle = '#818cf8';
+      } else {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.4)';
       }
 
-      // Draw playhead
-      const px = startX + playhead * totalWidth;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y - height / 2, width - 2, height, 2);
+      ctx.fill();
+    });
+
+    // Reset shadow blur before playhead
+    ctx.shadowBlur = 0;
+
+    // Draw playhead vertical line
+    if (state.isRunning) {
+      const px = paddingX + (state.currentTick / state.totalTicks) * totalWidth;
+      
+      // Playhead line
+      ctx.strokeStyle = 'rgba(129, 140, 248, 0.8)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(px, 0);
       ctx.lineTo(px, canvas.height);
       ctx.stroke();
+
+      // Glowing Playhead cap
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(px, 5, 3, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     requestRef.current = requestAnimationFrame(draw);
   };
 
   useEffect(() => {
-    startTimeRef.current = 0;
     requestRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(requestRef.current);
   }, [isPlaying, instrumentType, groove, density]);
@@ -106,14 +144,16 @@ export const MidiVisualizer: React.FC<MidiVisualizerProps> = ({
   return (
     <div className="relative w-full h-28 rounded-xl overflow-hidden group"
       style={{ background: '#0d0d0e', border: '1px solid #222224' }}>
-      <div className="absolute top-2 left-3 flex items-center gap-2">
+      <div className="absolute top-2 left-3 flex items-center gap-2 z-10">
         <div className={`w-1.5 h-1.5 rounded-full ${isPlaying ? 'bg-studio-accent led-on animate-pulse' : 'bg-studio-muted'}`} />
-        <span className="text-[8px] font-mono text-studio-muted uppercase tracking-[0.15em]">MIDI Stream</span>
+        <span className="text-[8px] font-mono text-studio-muted uppercase tracking-[0.15em] select-none">
+          {instrumentType} Live MIDI Roll
+        </span>
       </div>
       <canvas 
         ref={canvasRef} 
         width={800} 
-        height={128} 
+        height={112} 
         className="w-full h-full"
       />
       <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(180deg, transparent 60%, rgba(10,10,11,0.8) 100%)' }} />
