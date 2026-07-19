@@ -1,9 +1,11 @@
 import { InstrumentType, SongSection, InstrumentState } from '../types';
 import { ProducerProfile } from '../types/producer';
 
+
 export interface EnergyCurve {
   bySection: Record<string, number>;
 }
+
 
 export interface ArrangementRole {
   instrument: InstrumentType;
@@ -16,6 +18,7 @@ export interface ArrangementRole {
   };
 }
 
+
 export interface ArrangementInteraction {
   id: string;
   resolve: (
@@ -23,11 +26,13 @@ export interface ArrangementInteraction {
   ) => Partial<Record<InstrumentType, { sparseness: number; velocityFloor: number }>>;
 }
 
+
 export interface ArrangementStyle {
   id: string;
   roles: Record<InstrumentType, ArrangementRole>;
   interactions: ArrangementInteraction[];
 }
+
 
 export function resolveArrangement(
   sections: SongSection[],
@@ -37,11 +42,17 @@ export function resolveArrangement(
 ): Record<string, Record<InstrumentType, Partial<InstrumentState['params']>>> {
   const result: Record<string, Record<InstrumentType, Partial<InstrumentState['params']>>> = {};
 
+
+  if (!sections || !curve || !style?.roles) return result;
+
+
   sections.forEach(section => {
     const energy = curve.bySection[section.id] ?? 0.5;
     const perInstrument: Record<InstrumentType, any> = {} as any;
 
-    const roleWeightFor = (inst: InstrumentType) => 1.0; // default weight
+
+    const roleWeightFor = (inst: InstrumentType) => 1.0; // default weight (unchanged)
+
 
     // Pass 1: resolve each instrument independently from the energy curve
     (Object.keys(style.roles) as InstrumentType[]).forEach(inst => {
@@ -49,8 +60,9 @@ export function resolveArrangement(
       perInstrument[inst] = role.resolveParams(energy, roleWeightFor(inst), producer);
     });
 
+
     // Pass 2: deterministic cross-instrument interactions (frequency/role carve-outs)
-    style.interactions.forEach(interaction => {
+    (style.interactions ?? []).forEach(interaction => {
       const adjustments = interaction.resolve(perInstrument);
       Object.entries(adjustments).forEach(([inst, adj]) => {
         if (adj) {
@@ -59,11 +71,14 @@ export function resolveArrangement(
       });
     });
 
+
     result[section.id] = perInstrument;
   });
 
+
   return result;
 }
+
 
 export const motownCallAndResponse: ArrangementInteraction = {
   id: 'motown-bass-keys-tradeoff',
@@ -77,18 +92,20 @@ export const motownCallAndResponse: ArrangementInteraction = {
   },
 };
 
+
 export const standardArrangementStyle: ArrangementStyle = {
   id: 'standard-dynamic',
   roles: {
     Drums: {
       instrument: 'Drums',
       resolveParams: (e, w, p) => {
-        const density = p ? p.rhythm.groove_density : 0.5;
+        const density = p?.rhythm?.groove_density ?? 0.5;
         return {
           sparseness: Math.max(10, Math.min(95, 100 - (e * 80) - (density * 10))),
           velocityFloor: 40 + (e * 30),
           velocityCeiling: 90 + (e * 30),
           layerCount: e > 0.7 ? 3 : 1,
+          // NOTE: `fillProbabilitySeed` is energy 0–1, used as a probability, not a PRNG seed
           fillProbabilitySeed: e
         };
       }
@@ -96,7 +113,7 @@ export const standardArrangementStyle: ArrangementStyle = {
     Bass: {
       instrument: 'Bass',
       resolveParams: (e, w, p) => {
-        const sync = p ? p.rhythm.syncopation : 0.5;
+        const sync = p?.rhythm?.syncopation ?? 0.5;
         return {
           sparseness: Math.max(15, 80 - (e * 60) - (sync * 15)),
           velocityFloor: 50 + (e * 20),
@@ -109,7 +126,7 @@ export const standardArrangementStyle: ArrangementStyle = {
     Keys: {
       instrument: 'Keys',
       resolveParams: (e, w, p) => {
-        const harm = p ? p.harmony.extensions_level : 0.5;
+        const harm = p?.harmony?.extensions_level ?? 0.5;
         return {
           sparseness: Math.max(20, 90 - (e * 70) - (harm * 10)),
           velocityFloor: 40 + (e * 20),
@@ -132,7 +149,7 @@ export const standardArrangementStyle: ArrangementStyle = {
     Pads: {
       instrument: 'Pads',
       resolveParams: (e, w, p) => {
-        const layers = p ? p.arrangement.layer_count : 0.5;
+        const layers = p?.arrangement?.layer_count ?? 0.5;
         return {
           sparseness: 60 - (e * 30),
           velocityFloor: 30 + (e * 20),
